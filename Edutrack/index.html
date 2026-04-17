@@ -1126,9 +1126,15 @@ async function askBackend(userMsg){
     const data=await res.json();
     typing.remove();
     
-    if(data.reply){
-      addMsg('bot',data.reply);
+        if(data.reply){
+      // This converts AI markdown into proper HTML with line breaks and bolding
+      let formattedReply = data.reply
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+        .replace(/\n/g, '<br>');
+      
+      addMsg('bot', formattedReply);
     } else if(data.error){
+
       addMsg('bot',`❌ Error: ${data.error}`);
     } else {
       addMsg('bot',`❌ Something went wrong.`);
