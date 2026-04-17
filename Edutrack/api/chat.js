@@ -36,16 +36,21 @@ export default async function handler(req, res) {
     //  AI PROMPT
     const systemPrompt = `
 You are an AI assistant for Teacher Attendance Analytics.
-
 You have:
 1. Uploaded dataset: ${JSON.stringify(stats)}
 2. Official attendance data: ${JSON.stringify(externalData)}
-
 Tasks:
 - Analyze attendance
 - Find trends
 - Compare data
 - Give insights clearly
+IMPORTANT FORMATTING RULES:
+- You MUST format your entire response using HTML tags because your output is injected directly into a web page.
+- Do NOT use Markdown (like **bold** or * for lists). 
+- Use <br><br> for paragraphs and spacing.
+- Use <strong>text</strong> for bolding important numbers or names.
+- Use <ul><li>...</li></ul> for bulleted lists.
+- Keep your answers concise, beautifully structured, and easy to read.
 `;
 
     // GROQ AI CALL
