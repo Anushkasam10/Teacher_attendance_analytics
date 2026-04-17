@@ -1109,6 +1109,23 @@ async function askBackend(userMsg){
     bottom10ByAttendance: sortedByAtt.slice(-10).reverse().map(r=>`${r._name}(${r._attPct}%)`).join(', ')
   };
 
+  const userMsgLower = userMsg.toLowerCase();
+  const relevantRows = ROWS.filter(r => userMsgLower.includes(r._name.toLowerCase()) || r._name.toLowerCase().split(' ').some(w => w.length > 3 && userMsgLower.includes(w))).slice(0, 3);
+  
+  if (relevantRows.length > 0) {
+    statsPayload.specificAreaDetails = relevantRows.map(r => ({
+      name: r._name,
+      teachers: r._teachers,
+      marked: r._marked,
+      notMarked: r._notMark,
+      attendanceRate: r._attPct,
+      onLeave: r._leave,
+      selfAttendance: r._self,
+      markOnDuty: r._duty,
+      schools: r._schools
+    }));
+  }
+
   try{
     const res=await fetch('/api/chat',{
       method:'POST',
