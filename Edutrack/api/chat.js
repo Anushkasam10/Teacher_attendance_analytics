@@ -1,3 +1,5 @@
+import { MongoClient } from 'mongodb';
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
@@ -8,28 +10,31 @@ export default async function handler(req, res) {
 
     let externalData = {};
 
-    //  FETCH FROM OFFICIAL API
+    //  FETCH FROM MONGODB
     if (externalApi.useOfficialApi) {
-      try {
-        const apiUrl = "https://bepc.entrolabs.com/admin/attendance_apis/api.php";
-
-        const queryParams = new URLSearchParams({
-          getStudentAttendance: "true",
-          school_code: externalApi.school_code || "10010301101",
-          date: externalApi.date || "2026-04-10"
-        });
-
-        const response = await fetch(`${apiUrl}?${queryParams}`, {
-          method: "GET",
-          headers: {
-            "Apikey": process.env.OFFICIAL_API_KEY   
+      const uri = process.env.MONGODB_URI;
+      if (!uri) {
+        externalData = { error: "Database configuration missing (MONGODB_URI)" };
+      } else {
+        const client = new MongoClient(uri);
+        try {
+          await client.connect();
+          const database = client.db('edutrack');
+          const collection = database.collection('attendance_records');
+          
+          // Fetch the most recently ingested record
+          const latestRecord = await collection.findOne({}, { sort: { timestamp: -1 } });
+          
+          if (latestRecord && latestRecord.payload) {
+             externalData = latestRecord.payload;
+          } else {
+             externalData = { info: "No data available in the database yet." };
           }
-        });
-
-        externalData = await response.json();
-
-      } catch (err) {
-        externalData = { error: "Official API fetch failed", details: err.message };
+        } catch (err) {
+          externalData = { error: "Database fetch failed", details: err.message };
+        } finally {
+          await client.close();
+        }
       }
     }
 
