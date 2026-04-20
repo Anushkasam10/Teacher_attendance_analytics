@@ -1096,6 +1096,9 @@ async function askBackend(userMsg){
   // Build a compact data context
   const statsPayload = {
     datasetName: FNAME,
+    columnsAvailable: COLS,
+    hasSchoolLevelData: S.isSchoolLevel,
+    hasBlockLevelData: S.isBlockLevel,
     totalRecords: ROWS.length,
     teachers: S.total,
     marked: S.marked,
