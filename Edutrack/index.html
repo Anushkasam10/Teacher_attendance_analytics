@@ -940,7 +940,7 @@ function renderDetail(){
 
   // HEAD
   const attH=hasAtt?`<th onclick="detSort(${displayCols.length})">ATT % ↕</th>`:'';
-  document.getElementById('det-head').innerHTML=`<tr>${ROWS.length>1?'<th>RANK</th>':''}${displayCols.map((c,i)=>`<th onclick="detSort(${i})">${c.length>22?c.slice(0,20)+'…':c} ↕</th>`).join('')}${attH}</tr>`;
+  document.getElementById('det-head').innerHTML=`<tr>${ROWS.length>1?'<th>RANK</th>':''}${displayCols.map((c,i)=>`<th title="${c}" onclick="detSort(${i})">${c} ↕</th>`).join('')}${attH}</tr>`;
 
   // BODY
   const start=(detPage-1)*PER;
