@@ -289,6 +289,9 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
       <p id="up-prog-lbl">Reading your data...</p>
       <div class="prog-bar-bg"><div class="prog-bar-fill" id="prog-fill"></div></div>
     </div>
+    <div style="margin-top:24px;text-align:center;">
+      <button onclick="skipUpload()" style="background:none;border:1px solid rgba(255,255,255,0.2);color:#60A5FA;padding:9px 18px;border-radius:8px;cursor:pointer;font-family:var(--fb);font-size:13px;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(37,99,235,0.1)';this.style.borderColor='#2563EB'" onmouseout="this.style.background='none';this.style.borderColor='rgba(255,255,255,0.2)'">Skip & Go to Smart Assistant ➔</button>
+    </div>
   </div>
   <div class="up-feats">
     <div class="upf"><div class="upf-i">🔒</div><div class="upf-t"><strong>100% Private</strong><span>Processed locally in browser</span></div></div>
@@ -661,6 +664,38 @@ function bootApp(raw,cols){
     document.getElementById('upload-screen').style.display='none';
     document.getElementById('app').style.display='block';
   },300);
+}
+
+function skipUpload() {
+  // Empty state initialization
+  RAW=[]; COLS=[]; ROWS=[]; FNAME="Database-Only Mode";
+  window.STATS = {total:0, marked:0, rate:0, notMark:0, leave:0, self_:0, duty:0, schools:0, schMark:0, schNot:0, isBlockLevel:false, isSchoolLevel:false, districts:0, mgmtTypes:[]};
+  
+  // UI update for sidebar
+  document.getElementById('sl-rate').textContent='—%';
+  document.getElementById('sl-sub-text').textContent=`Querying live MongoDB data`;
+  document.getElementById('sl-fname').textContent='📁 No file uploaded';
+  document.getElementById('tb-badge').textContent='LIVE DB';
+
+  // Make the dashboard look empty but intentional
+  document.getElementById('kpi-grid').innerHTML = '<div class="empty-state" style="grid-column:1/-1;margin-top:20px"><div class="ei">🤖</div><h3>Smart Assistant Mode</h3><p>You skipped the file upload. Only the Smart Assistant is active, querying your MongoDB database.</p></div>';
+  document.getElementById('ov-charts').innerHTML = '';
+  document.getElementById('ov-extra').innerHTML = '';
+  
+  // Switch screens
+  document.getElementById('upload-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  
+  // Navigate to Assistant Tab
+  goto('assistant');
+  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(i=>{if(i.textContent.includes('Smart Assistant'))i.classList.add('active');});
+
+  // Setup Assistant UI for Database-only mode
+  document.getElementById('chat-hd-sub').textContent=`Connected to MongoDB`;
+  document.getElementById('welcome-msg').innerHTML=`Hello! I am running in <strong>Database-only mode</strong>.<br><br>I am connected directly to your MongoDB database. You can ask me questions about the data that the government team has pushed!`;
+  document.getElementById('chips').innerHTML=`<div class="chip" onclick="qs('What is the status of the data recently pushed?')">Check recent push status</div>`;
+  document.getElementById('chat-side').innerHTML='';
 }
 
 // ============================================================
@@ -1141,7 +1176,7 @@ async function askBackend(userMsg){
         message: userMsg,
         stats: statsPayload,
         externalApi: {
-          useOfficialApi: false, // Set to true when you want to fetch from official Bihar gov API
+          useOfficialApi: true, // Fetching from MongoDB
           school_code: "10010301101", 
           date: new Date().toISOString().split('T')[0]
         }
