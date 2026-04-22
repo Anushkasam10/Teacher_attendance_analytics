@@ -1406,10 +1406,7 @@ function resetApp(){
 // ============================================================
 function fN(n){
   if(n===undefined||n===null||isNaN(n))return'—';
-  if(Math.abs(n)>=1e7)return(n/1e7).toFixed(2)+'Cr';
-  if(Math.abs(n)>=1e5)return(n/1e5).toFixed(2)+'L';
-  if(Math.abs(n)>=1e3)return(n/1e3).toFixed(1)+'K';
-  return Number.isInteger(n)?n.toLocaleString():parseFloat(n.toFixed(2)).toLocaleString();
+  return Number.isInteger(n)?n.toLocaleString('en-IN'):parseFloat(n.toFixed(2)).toLocaleString('en-IN');
 }
 function sh(s,n=12){return s&&s.length>n?s.slice(0,n-1)+'…':s;}
 </script>
