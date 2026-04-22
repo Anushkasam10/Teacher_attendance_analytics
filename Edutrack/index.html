@@ -93,13 +93,22 @@ body{font-family:var(--fb);background:var(--bg);color:var(--text);min-height:100
 .fg-range{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);}
 .fg-range input[type=range]{width:90px;accent-color:var(--accent);}
 .fg-range input[type=number]{width:54px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:11px;font-family:var(--fm);color:var(--text);outline:none;}
+.ms-wrap{position:relative;width:150px;}
+.ms-btn{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:12px;color:var(--text);font-family:var(--fb);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:border-color .2s;width:100%;text-align:left;}
+.ms-btn:hover{border-color:var(--accent);}
+.ms-btn::after{content:'▼';font-size:8px;margin-left:8px;color:var(--text3);}
+.ms-dropdown{position:absolute;top:100%;left:0;width:220px;background:#fff;border:1px solid var(--border);border-radius:8px;margin-top:4px;box-shadow:var(--sh);z-index:100;max-height:250px;overflow-y:auto;display:none;padding:5px 0;}
+.ms-wrap.open .ms-dropdown{display:block;}
+.ms-opt{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;transition:background .15s;font-size:12px;}
+.ms-opt:hover{background:var(--card2);}
+.ms-opt input{accent-color:var(--accent);cursor:pointer;}
 .active-chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px;width:100%;}
 .chip-tag{display:inline-flex;align-items:center;gap:5px;background:var(--accent-l);border:1px solid rgba(37,99,235,.25);color:var(--accent);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;}
 .chip-tag button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;line-height:1;padding:0;}
 .clear-all-btn{background:var(--red-l);border:1px solid rgba(220,38,38,.2);color:var(--red);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--fb);}
 
 /* ===== CONTENT ===== */
-.content{padding:22px 24px;flex:1;}
+.content{padding:22px 24px;flex:1;max-width:1400px;margin:0 auto;width:100%;}
 .tab-panel{display:none;animation:fadeUp .25s ease;}
 .tab-panel.active{display:block;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -611,10 +620,22 @@ function bootApp(raw,cols){
   showProgress('Building dashboard...',90);
   RAW=raw;COLS=cols;
   SCHEMA=detectSchema(cols);
-  ROWS=processRows(raw,SCHEMA);
+  window.ALL_ROWS=processRows(raw,SCHEMA);
+  ROWS=[...window.ALL_ROWS];
   window.ACTIVE_FILTERS={};
   detFilt=[...ROWS];
 
+  buildFilterBar();
+  renderDashboard();
+
+  showProgress('Done!',100);
+  setTimeout(()=>{
+    document.getElementById('upload-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+  },300);
+}
+
+function renderDashboard(){
   window.DISTRICT_ROWS=SCHEMA.blockCol&&SCHEMA.districtCol?aggregateByGroup(ROWS,'_district'):null;
 
   const isBlockLevel=!!(SCHEMA.blockCol&&SCHEMA.districtCol);
@@ -650,7 +671,6 @@ function bootApp(raw,cols){
   Object.values(chartInstances).forEach(c=>{try{c.destroy();}catch(e){}});
   chartInstances={};
 
-  buildFilterBar();
   buildOverview();
   buildRecords();
   buildSchools();
@@ -658,12 +678,6 @@ function bootApp(raw,cols){
   buildPerformance();
   buildGap();
   buildAssistant();
-
-  showProgress('Done!',100);
-  setTimeout(()=>{
-    document.getElementById('upload-screen').style.display='none';
-    document.getElementById('app').style.display='block';
-  },300);
 }
 
 async function loadLiveDatabase() {
@@ -723,30 +737,30 @@ function buildFilterBar(){
   // Categorical filters
   const catCols=[SCHEMA.districtCol,SCHEMA.blockCol,SCHEMA.mgmtCol].filter(Boolean);
   catCols.forEach(col=>{
-    const vals=[...new Set(ROWS.map(r=>String(r[col]||'').trim()).filter(Boolean))].sort();
+    const vals=[...new Set(window.ALL_ROWS.map(r=>String(r[col]||'').trim()).filter(Boolean))].sort();
     if(vals.length<2)return;
     const grp=document.createElement('div');
     grp.className='filter-group';
-    const sel=document.createElement('select');
-    sel.className='fg-select';
-    sel.innerHTML=`<option value="">All ${col}</option>`+vals.map(v=>`<option value="${v}">${v}</option>`).join('');
-    sel.onchange=()=>applyFilter(col,'categorical',sel.value);
-    grp.innerHTML=`<div class="fg-label">${col}</div>`;
-    grp.appendChild(sel);
+    grp.innerHTML=`<div class="fg-label">${col}</div>
+      <div class="ms-wrap" id="ms-${col.replace(/\W/g,'')}">
+        <button class="ms-btn" onclick="toggleMS(this)">All ${col}</button>
+        <div class="ms-dropdown">
+          ${vals.map(v=>`<label class="ms-opt"><input type="checkbox" value="${v}" onchange="updateMS('${col}')"> ${v}</label>`).join('')}
+        </div>
+      </div>`;
     fc.appendChild(grp);
   });
 
   // Attendance % range filter
-  if(ROWS.length>1){
-    const pcts=ROWS.map(r=>r._attPct).filter(v=>v>0);
+  if(window.ALL_ROWS.length>1){
+    const pcts=window.ALL_ROWS.map(r=>r._attPct).filter(v=>v>0);
     const minP=Math.floor(Math.min(...pcts)),maxP=Math.ceil(Math.max(...pcts));
     const grp=document.createElement('div');
     grp.className='filter-group';
     grp.innerHTML=`<div class="fg-label">Attendance %</div>
       <div class="fg-range">
-        <input type="number" id="att-min" value="${minP}" min="${minP}" max="${maxP}" style="width:52px"> –
-        <input type="number" id="att-max" value="${maxP}" min="${minP}" max="${maxP}" style="width:52px">
-        <button class="pn-btn" onclick="applyAttFilter()" style="padding:4px 9px">Apply</button>
+        <input type="number" id="att-min" value="${minP}" min="${minP}" max="${maxP}" oninput="applyAttFilter()" style="width:52px"> –
+        <input type="number" id="att-max" value="${maxP}" min="${minP}" max="${maxP}" oninput="applyAttFilter()" style="width:52px">
       </div>`;
     fc.appendChild(grp);
   }
@@ -754,11 +768,28 @@ function buildFilterBar(){
   renderActiveChips();
 }
 
-function applyFilter(col,type,val){
-  if(!val){delete window.ACTIVE_FILTERS[col];}
-  else{window.ACTIVE_FILTERS[col]={type,value:val};}
+function toggleMS(btn){
+  btn.parentElement.classList.toggle('open');
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.ms-wrap')){
+    document.querySelectorAll('.ms-wrap').forEach(w=>w.classList.remove('open'));
+  }
+});
+
+function updateMS(col){
+  const wrap = document.getElementById(`ms-${col.replace(/\W/g,'')}`);
+  const checked = Array.from(wrap.querySelectorAll('input:checked')).map(i=>i.value);
+  const btn = wrap.querySelector('.ms-btn');
+  
+  if(checked.length===0){
+    btn.textContent = `All ${col}`;
+    delete window.ACTIVE_FILTERS[col];
+  } else {
+    btn.textContent = checked.length===1 ? checked[0] : `${checked.length} Selected`;
+    window.ACTIVE_FILTERS[col]={type:'categorical',value:checked};
+  }
   applyAllFilters();
-  renderActiveChips();
 }
 
 function applyAttFilter(){
@@ -767,48 +798,70 @@ function applyAttFilter(){
   if(mn===0&&mx===100){delete window.ACTIVE_FILTERS['_attPct'];}
   else{window.ACTIVE_FILTERS['_attPct']={type:'range',min:mn,max:mx};}
   applyAllFilters();
-  renderActiveChips();
 }
 
 function applyAllFilters(){
-  detFilt=ROWS.filter(r=>{
+  ROWS=window.ALL_ROWS.filter(r=>{
     return Object.entries(window.ACTIVE_FILTERS).every(([col,f])=>{
-      if(f.type==='categorical') return String(r[col]||'').trim()===f.value;
+      if(f.type==='categorical'){
+        if(f.value.length===0) return true;
+        return f.value.includes(String(r[col]||'').trim());
+      }
       if(f.type==='range') return r[col]>=f.min&&r[col]<=f.max;
       return true;
     });
   });
-  detPage=1;
-  renderDetail();
-  document.getElementById('tb-badge').textContent=detFilt.length+' FILTERED';
+  renderDashboard();
+  renderActiveChips();
 }
 
 function removeFilter(col){
   delete window.ACTIVE_FILTERS[col];
-  // Reset the select UI
-  const fc=document.getElementById('filter-controls');
-  const selects=fc.querySelectorAll('select');
-  selects.forEach(s=>{if(s.onchange.toString().includes(col))s.value='';});
+  if(col==='_attPct'){
+    const pcts=window.ALL_ROWS.map(r=>r._attPct).filter(v=>v>0);
+    document.getElementById('att-min').value=Math.floor(Math.min(...pcts));
+    document.getElementById('att-max').value=Math.ceil(Math.max(...pcts));
+  } else {
+    const wrap = document.getElementById(`ms-${col.replace(/\W/g,'')}`);
+    if(wrap){
+      wrap.querySelectorAll('input').forEach(i=>i.checked=false);
+      wrap.querySelector('.ms-btn').textContent=`All ${col}`;
+    }
+  }
   applyAllFilters();
-  renderActiveChips();
 }
 
 function clearAllFilters(){
   window.ACTIVE_FILTERS={};
-  document.getElementById('filter-controls').querySelectorAll('select').forEach(s=>s.value='');
-  detFilt=[...ROWS];detPage=1;renderDetail();
-  document.getElementById('tb-badge').textContent=ROWS.length+' RECORDS';
-  renderActiveChips();
+  document.querySelectorAll('.ms-wrap').forEach(wrap=>{
+    wrap.querySelectorAll('input').forEach(i=>i.checked=false);
+    const label = wrap.parentElement.querySelector('.fg-label').textContent;
+    wrap.querySelector('.ms-btn').textContent = `All ${label}`;
+  });
+  const pcts=window.ALL_ROWS.map(r=>r._attPct).filter(v=>v>0);
+  if(document.getElementById('att-min')){
+    document.getElementById('att-min').value=Math.floor(Math.min(...pcts));
+    document.getElementById('att-max').value=Math.ceil(Math.max(...pcts));
+  }
+  applyAllFilters();
 }
 
 function renderActiveChips(){
   const ac=document.getElementById('active-chips');
-  const entries=Object.entries(window.ACTIVE_FILTERS);
-  if(!entries.length){ac.innerHTML='';return;}
-  ac.innerHTML=entries.map(([col,f])=>{
-    const lbl=f.type==='range'?`${col}: ${f.min}%–${f.max}%`:`${col}: ${f.value}`;
-    return `<span class="chip-tag">${lbl}<button onclick="removeFilter('${col}')">✕</button></span>`;
-  }).join('')+`<button class="clear-all-btn" onclick="clearAllFilters()">Clear All</button>`;
+  ac.innerHTML='';
+  Object.entries(window.ACTIVE_FILTERS).forEach(([col,f])=>{
+    let txt='';
+    if(f.type==='categorical'){
+      txt=`${col}: ${f.value.join(', ')}`;
+      if(txt.length>40) txt=`${col}: ${f.value.length} selected`;
+    }else{
+      txt=`Att %: ${f.min}–${f.max}%`;
+    }
+    ac.innerHTML+=`<span class="chip-tag">${txt}<button onclick="removeFilter('${col}')">✕</button></span>`;
+  });
+  if(Object.keys(window.ACTIVE_FILTERS).length>0){
+    ac.innerHTML+=`<button class="clear-all-btn" onclick="clearAllFilters()">Clear All</button>`;
+  }
 }
 
 function toggleFilters(){
@@ -968,8 +1021,7 @@ function buildDetail(){
 
 function filterDetail(){
   const q=document.getElementById('det-q').value.toLowerCase().trim();
-  const base=Object.keys(window.ACTIVE_FILTERS).length>0?ROWS.filter(r=>Object.entries(window.ACTIVE_FILTERS).every(([col,f])=>f.type==='categorical'?String(r[col]||'').trim()===f.value:r[col]>=f.min&&r[col]<=f.max)):ROWS;
-  detFilt=q?base.filter(r=>COLS.some(c=>String(r[c]||'').toLowerCase().includes(q))):base;
+  detFilt=q?ROWS.filter(r=>COLS.some(c=>String(r[c]||'').toLowerCase().includes(q))):[...ROWS];
   detPage=1;renderDetail();
 }
 
