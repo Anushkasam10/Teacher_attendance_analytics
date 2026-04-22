@@ -1,56 +1,24 @@
-import { MongoClient } from 'mongodb';
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
   }
 
   try {
-    const { message, stats = {}, externalApi = {} } = req.body;
-
-    let externalData = {};
-
-    //  FETCH FROM MONGODB
-    if (externalApi.useOfficialApi) {
-      const uri = process.env.MONGODB_URI;
-      if (!uri) {
-        externalData = { error: "Database configuration missing (MONGODB_URI)" };
-      } else {
-        const client = new MongoClient(uri);
-        try {
-          await client.connect();
-          const database = client.db('edutrack');
-          const collection = database.collection('attendance_records');
-          
-          // Fetch the most recently ingested record
-          const latestRecord = await collection.findOne({}, { sort: { timestamp: -1 } });
-          
-          if (latestRecord && latestRecord.payload) {
-             externalData = latestRecord.payload;
-          } else {
-             externalData = { info: "No data available in the database yet." };
-          }
-        } catch (err) {
-          externalData = { error: "Database fetch failed", details: err.message };
-        } finally {
-          await client.close();
-        }
-      }
-    }
+    const { message, stats = {} } = req.body;
 
     //  AI PROMPT
     const systemPrompt = `
 You are an AI assistant for Teacher Attendance Analytics.
 
-You have:
-1. Uploaded dataset: ${JSON.stringify(stats)}
-2. Official attendance data: ${JSON.stringify(externalData)}
+You have the following dataset context:
+${JSON.stringify(stats)}
 
 Tasks:
 - Analyze attendance
 - Find trends
 - Compare data
 - Give insights clearly
+- Answer STRICTLY based on the provided dataset context.
 `;
 
     // GROQ AI CALL
@@ -72,8 +40,7 @@ Tasks:
     const data = await aiResponse.json();
 
     return res.status(200).json({
-      reply: data.choices?.[0]?.message?.content || "No response",
-      externalData // optional (for debugging)
+      reply: data.choices?.[0]?.message?.content || "No response"
     });
 
   } catch (error) {
