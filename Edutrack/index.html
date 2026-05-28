@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#F0F4FF;--sidebar:#0A1628;--card:#fff;--card2:#F8FAFF;
@@ -464,6 +465,12 @@ let chartInstances={};
 const PER=25;
 window.ACTIVE_FILTERS={};
 
+// Supabase Configuration
+const SUPABASE_URL = 'https://wetdquunegzuxdplhdwo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_IjlZxZyky9aPUIvx1UZTRQ_1hgVa4oZ';
+const SUPABASE_BUCKET = 'attendance-files';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ============================================================
 // UPLOAD
 // ============================================================
@@ -725,6 +732,89 @@ async function loadLiveDatabase() {
     resetApp();
   }
 }
+
+async function loadFromSupabase() {
+  showProgress('Connecting to Supabase Storage...', 10);
+  try {
+    const { data: files, error: listError } = await supabaseClient.storage
+      .from(SUPABASE_BUCKET)
+      .list('', {
+        sortBy: { column: 'updated_at', order: 'desc' }
+      });
+
+    if (listError) {
+      throw listError;
+    }
+
+    if (!files || files.length === 0) {
+      throw new Error(`No files found in Supabase bucket '${SUPABASE_BUCKET}'`);
+    }
+
+    // Find the latest Excel or CSV file
+    const targetFile = files.find(f => {
+      const ext = f.name.split('.').pop().toLowerCase();
+      return ext === 'xlsx' || ext === 'xls' || ext === 'csv';
+    });
+
+    if (!targetFile) {
+      throw new Error(`No Excel (.xlsx, .xls) or CSV files found in Supabase bucket '${SUPABASE_BUCKET}'`);
+    }
+
+    showProgress(`Downloading ${targetFile.name}...`, 40);
+    const { data: blob, error: downloadError } = await supabaseClient.storage
+      .from(SUPABASE_BUCKET)
+      .download(targetFile.name);
+
+    if (downloadError) {
+      throw downloadError;
+    }
+
+    showProgress('Parsing downloaded data...', 75);
+    FNAME = targetFile.name;
+    const ext = targetFile.name.split('.').pop().toLowerCase();
+
+    if (ext === 'csv') {
+      const text = await blob.text();
+      showProgress('Parsing CSV...', 85);
+      const r = Papa.parse(text.trim(), { header: false, skipEmptyLines: true, dynamicTyping: false });
+      showProgress('Detecting columns...', 95);
+      const { data, cols } = smartDetectHeader(r.data);
+      setTimeout(() => bootApp(data, cols), 80);
+    } else {
+      const arrayBuffer = await blob.arrayBuffer();
+      showProgress('Parsing Excel...', 85);
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      showProgress('Detecting columns...', 95);
+      const { data, cols } = smartDetectHeader(raw);
+      setTimeout(() => bootApp(data, cols), 80);
+    }
+  } catch (err) {
+    console.error('Supabase load error:', err);
+    
+    // Hide the progress bar
+    const upProg = document.getElementById('up-progress');
+    if (upProg) upProg.style.display = 'none';
+    
+    // Update the drop zone text to show the failure and prompt for manual upload
+    const dropZone = document.getElementById('drop-zone');
+    if (dropZone) {
+      dropZone.innerHTML = `
+        <div class="drop-icon">⚠️</div>
+        <h3>Auto-load from Supabase failed</h3>
+        <p style="color: #F87171; font-weight: 500; margin-bottom: 10px;">${err.message || err}</p>
+        <p>Please drag & drop your Excel/CSV file here to upload manually.</p>
+        <div class="ext-badges"><span class="ext">CSV</span><span class="ext">XLSX</span><span class="ext">XLS</span></div>
+      `;
+    }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadFromSupabase();
+});
+
 
 // ============================================================
 // FILTER BAR
@@ -1181,7 +1271,14 @@ async function sendMsg(){
   inp.value='';
   addMsg('user',t);
 
-  await askBackend(t);   
+  const typing = addMsg('bot', '<div class="typing-dots"><span></span><span></span><span></span></div>');
+  
+  // Simulate network delay for natural feel, then use local keyword logic
+  setTimeout(() => {
+    typing.remove();
+    const reply = keywordAnswer(t);
+    addMsg('bot', reply);
+  }, 600);
 }
 
 function addMsg(role,html){
@@ -1192,79 +1289,7 @@ function addMsg(role,html){
   return d;
 }
 
-async function askBackend(userMsg){
-  // Show typing indicator
-  const typing=addMsg('bot','<div class="typing-dots"><span></span><span></span><span></span></div>');
-  const S=window.STATS;
-  const sortedByAtt=[...ROWS].sort((a,b)=>b._attPct-a._attPct);
 
-  // Build a compact data context
-  const statsPayload = {
-    datasetName: FNAME,
-    columnsAvailable: COLS,
-    hasSchoolLevelData: S.isSchoolLevel,
-    hasBlockLevelData: S.isBlockLevel,
-    totalRecords: ROWS.length,
-    teachers: S.total,
-    marked: S.marked,
-    attendanceRate: S.rate,
-    notMarked: S.notMark,
-    onLeave: S.leave,
-    selfAttendance: S.self_,
-    markOnDuty: S.duty,
-    schools: S.schools,
-    top10ByAttendance: sortedByAtt.slice(0,10).map(r=>`${r._name}(${r._attPct}%)`).join(', '),
-    bottom10ByAttendance: sortedByAtt.slice(-10).reverse().map(r=>`${r._name}(${r._attPct}%)`).join(', ')
-  };
-
-  const userMsgLower = userMsg.toLowerCase();
-  const relevantRows = ROWS.filter(r => userMsgLower.includes(r._name.toLowerCase()) || r._name.toLowerCase().split(' ').some(w => w.length > 3 && userMsgLower.includes(w))).slice(0, 3);
-  
-  if (relevantRows.length > 0) {
-    statsPayload.specificAreaDetails = relevantRows.map(r => ({
-      name: r._name,
-      teachers: r._teachers,
-      marked: r._marked,
-      notMarked: r._notMark,
-      attendanceRate: r._attPct,
-      onLeave: r._leave,
-      selfAttendance: r._self,
-      markOnDuty: r._duty,
-      schools: r._schools
-    }));
-  }
-
-  try{
-    const res=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        message: userMsg,
-        stats: statsPayload,
-        externalApi: {
-          useOfficialApi: true, // Fetching from MongoDB
-          school_code: "10010301101", 
-          date: new Date().toISOString().split('T')[0]
-        }
-      })
-    });
-    
-    const data=await res.json();
-    typing.remove();
-    
-    if(data.reply){
-      const formattedReply = window.marked ? marked.parse(data.reply) : data.reply;
-      addMsg('bot', formattedReply);
-    } else if(data.error){
-      addMsg('bot',`❌ Error: ${data.error}`);
-    } else {
-      addMsg('bot',`❌ Something went wrong.`);
-    }
-  } catch(err){
-    typing.remove();
-    addMsg('bot',`❌ Could not connect to backend. Please check your connection.`);
-  }
-}
 
 function keywordAnswer(q){
   const ql=q.toLowerCase();
